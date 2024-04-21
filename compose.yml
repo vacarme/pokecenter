@@ -1,0 +1,46 @@
+x-db: &db
+  image: "postgres:16.2"
+  restart: always
+  environment:
+    - POSTGRES_USER=${DB_USER:-postgres}
+    - POSTGRES_PASSWORD=${DB_PASSWORD}
+    - POSTGRES_DB=${DB_NAME:-descartes}
+    
+
+services:
+  db:
+    <<: *db
+    container_name: poke-db
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "${DB_NAME}", "-U", "${DB_USER}" ]
+      timeout: 5s
+      interval: 5s
+      retries: 5
+    volumes:
+      - ${DB_STORAGE}:/var/lib/postgresql/data
+      - ${DB_INGESTION_DIR}/data:/data
+      - ${DB_INGESTION_DIR}/public.sql:/docker-entrypoint-initdb.d/public.sql
+    ports:
+      - "${DB_PORT:-5432}:5432"
+
+      
+  db-test:
+    <<: *db
+    container_name: poke-db-test
+    volumes:
+      - ${DB_STORAGE}-test:/var/lib/postgresql/data
+    ports:
+      - 5433:5432
+
+
+  api:
+    container_name: poke-api
+    build: .
+    pull_policy: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=db
+    ports:
+      - "8000:8000"
